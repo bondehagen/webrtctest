@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>WebRTC test</title>
+	<meta charset="utf-8"/>
+	<style type="text/css">
+		body > div {
+			display: none;
+		}
+		p {
+			height: 150px;
+		}
+	</style>
+</head>
+<body>
+
+	<h1><a href="/">WebRTC test</a></h1>
+	<div id="startPage">
+		<a href="#join">join</a>
+		<a href="#create">create</a>
+	</div>
+	<div id="joinPage">
+		<h2>Join</h2>
+		<h2>Paste offer</h2>
+		<textarea rows="5" cols="60"></textarea>
+		<button>ok</button>
+		<h2>Copy answer</h2>
+		<p></p>
+	</div>
+	<div id="createPage">
+		<h2>Create</h2>
+		<h2>Copy offer</h2>
+		<p></p>
+		<h2>Paste answer</h2>
+		<textarea rows="5" cols="60"></textarea>
+		<button>ok</button>
+	</div>
+	<div id="chatPage">
+		<input type="text" />
+		<ul></ul>
+	</div>
+
+	<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+	<script>
+
+		var startPage = document.getElementById('startPage');
+		var joinPage = document.getElementById('joinPage');
+		var createPage = document.getElementById('createPage');
+		var chatPage = document.getElementById('chatPage');
+
+		var joinInput = joinPage.querySelector('textarea');
+		var joinClick = joinPage.querySelector('button');
+
+		joinClick.addEventListener('click', () => {
+			var offer = JSON.parse(joinInput.value);
+			receiveOffer(offer);
+		});
+
+		var createInput = createPage.querySelector('textarea');
+		var createClick = createPage.querySelector('button');
+
+		createClick.addEventListener('click', () => {
+			var answer = JSON.parse(createInput.value);
+			receiveAnswer(answer);
+		});
+
+		var textInput = chatPage.querySelector('input')
+		textInput.addEventListener('keyup', (e) => {
+			if(e.keyCode == 13) {
+				dc.send(textInput.value);
+			}
+		});
+
+		function onHashChange() {
+			var type = window.location.hash.substr(1);
+			startPage.style.display = 'none';
+			joinPage.style.display = 'none';
+			createPage.style.display = 'none';
+			chatPage.style.display = 'none';
+			if (type == 'join') {
+				init();
+				joinPage.style.display = 'block';
+				peer.ondatachannel = e => dcInit(dc = e.channel);
+			} else if(type == 'create') {
+				createPage.style.display = 'block';
+				init();
+				dcInit(dc = peer.createDataChannel("chat"));
+			} else {
+				startPage.style.display = 'block';
+			}
+		}
+		
+		function showDescription(desc) {
+			var pp = document.getElementsByTagName('p');
+			for(var p of pp)
+				p.textContent = JSON.stringify(desc);
+			/*console.log("---copy this---");
+			console.log(JSON.stringify(desc))
+			console.log("--- end ---");*/
+			//offer.value = pc.localDescription.sdp;
+			//offer.select();
+		}
+		var peer = null;
+
+		var config = {
+			iceServers: [{
+				urls: "turn:numb.viagenie.ca",
+				username: "", 
+				credential: ""
+			}, { urls: [ "stun:stun.l.google.com:19302" ] }],
+			iceTransportPolicy: 'all',
+			//iceCandidatePoolSize: 0
+		};
+
+		function init() {
+			//config = null;
+			peer = new RTCPeerConnection(config);
+
+			peer.ontrack = e => {
+				console.log("ontrack");
+			};
+
+			peer.oniceconnectionstatechange = e => {
+				console.log("ICe connection state change:", peer.iceConnectionState);
+				console.log(e);
+			};
+			peer.onicecandidate = (e) => {
+				console.log('ICE candidate', e.candidate);
+				if (e.candidate) return;
+				showDescription(peer.localDescription);
+			};
+			peer.onicegatheringstatechange = (e) => {
+				console.log('ICE gathering state change:', peer.iceGatheringState);
+			};
+			peer.onsignalingstatechange = () => {
+				console.log('signaling state change:', peer.signalingState);
+			}
+			peer.onnegotiationneeded = () => {
+				console.log('negotiation needed');
+				createOffer();
+			};
+		}
+		
+		var ul = chatPage.querySelector('ul');
+		function dcInit() {
+			console.log('create datachannel');
+			dc.onopen = () => {
+				console.log('datachannel open');
+				startPage.style.display = 'none';
+				joinPage.style.display = 'none';
+				createPage.style.display = 'none';
+				chatPage.style.display = 'block';
+			}
+			dc.onclose = () => console.log('datachannel close');
+			dc.onmessage = e => {
+				var li = document.createElement("li");
+				li.appendChild(document.createTextNode(e.data));
+				ul.appendChild(li);
+			};
+		}
+
+		var offerOptions = {offerToReceiveAudio: 1};
+		var dc = null;
+		var createOffer = () => {
+			console.log('create offer');
+			peer.createOffer(offerOptions).then(offer => {
+				peer.setLocalDescription(offer);
+			}).catch((e) => console.log("error", e));;
+		};
+		var receiveOffer = (offer) => {
+			//var desc = new RTCSessionDescription({ type:"offer", sdp:offer.value });
+			peer.setRemoteDescription(offer);
+			console.log('Offer: '+offer.sdp);
+			createAnswer();
+		};
+		var createAnswer = () => {
+			peer.createAnswer(offerOptions).then(answer => {
+				peer.setLocalDescription(answer);
+				showDescription(answer);
+			}).catch((e) => console.log("error"));;
+		};
+		var receiveAnswer = (answer) => {
+			peer.setRemoteDescription(answer);
+			console.log('Answer: '+answer.sdp);
+		};
+
+		window.addEventListener('hashchange', onHashChange);
+
+		window.addEventListener('load', function() {
+			onHashChange();
+		});
+	</script>
+
+</body>
+
+</html>
