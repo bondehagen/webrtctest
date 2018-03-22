@@ -8,7 +8,17 @@
 			display: none;
 		}
 		p {
-			height: 150px;
+			height: 100px;
+			font-family: 'Courier New', Courier, monospace;
+			font-size: 0.8em;
+			background: #ccc;
+			overflow: auto;
+			width: 80%;
+			padding: 10px;
+			overflow-wrap: break-word;
+		}
+		button {
+			display: block;
 		}
 	</style>
 </head>
@@ -21,22 +31,22 @@
 	</div>
 	<div id="joinPage">
 		<h2>Join</h2>
-		<h2>Paste offer</h2>
-		<textarea rows="5" cols="60"></textarea>
+		<h3>1. Paste in offer from other person</h3>
+		<textarea rows="5" cols="80" wrap="soft"></textarea>
 		<button>ok</button>
-		<h2>Copy answer</h2>
+		<h3>2. Copy answer and send to other person</h3>
 		<p></p>
 	</div>
 	<div id="createPage">
 		<h2>Create</h2>
-		<h2>Copy offer</h2>
+		<h3>1. Copy offer and send to other person</h3>
 		<p></p>
-		<h2>Paste answer</h2>
-		<textarea rows="5" cols="60"></textarea>
+		<h3>2. Paste answer from other person</h3>
+		<textarea rows="5" cols="80"></textarea>
 		<button>ok</button>
 	</div>
 	<div id="chatPage">
-		<input type="text" />
+		<label>message (hit [enter] to send): <input type="text" /></label>
 		<ul></ul>
 	</div>
 
@@ -52,22 +62,28 @@
 		var joinClick = joinPage.querySelector('button');
 
 		joinClick.addEventListener('click', () => {
-			var offer = JSON.parse(joinInput.value);
-			receiveOffer(offer);
+			if(joinInput.value.length > 0) {
+				var offer = JSON.parse(Base64Decode(joinInput.value));
+				receiveOffer(offer);
+			}
 		});
 
 		var createInput = createPage.querySelector('textarea');
 		var createClick = createPage.querySelector('button');
 
 		createClick.addEventListener('click', () => {
-			var answer = JSON.parse(createInput.value);
-			receiveAnswer(answer);
+			if(createInput.value.length > 0) {
+				var answer = JSON.parse(Base64Decode(createInput.value));
+				receiveAnswer(answer);
+			}
 		});
 
 		var textInput = chatPage.querySelector('input')
 		textInput.addEventListener('keyup', (e) => {
 			if(e.keyCode == 13) {
 				dc.send(textInput.value);
+				addToChat(textInput.value);
+				textInput.value = '';
 			}
 		});
 
@@ -91,29 +107,29 @@
 		}
 		
 		function showDescription(desc) {
-			var pp = document.getElementsByTagName('p');
-			for(var p of pp)
-				p.textContent = JSON.stringify(desc);
-			/*console.log("---copy this---");
-			console.log(JSON.stringify(desc))
-			console.log("--- end ---");*/
-			//offer.value = pc.localDescription.sdp;
-			//offer.select();
+			var selector = '#' + window.location.hash.substr(1) + 'Page > p';
+			var p = document.querySelector(selector);
+			p.textContent = Base64Encode(JSON.stringify(desc));
+			SelectText(p);
 		}
 		var peer = null;
-
+		var config = null;
+		/* NOTE: if you are behind NAT and want to test this publicly, you need a STUN and/or TURN server:
 		var config = {
-			iceServers: [{
-				urls: "turn:numb.viagenie.ca",
-				username: "", 
-				credential: ""
-			}, { urls: [ "stun:stun.l.google.com:19302" ] }],
+			iceServers: [ {
+					urls: "turn:numb.viagenie.ca",
+					username: "", 
+					credential: ""
+				}, {
+					urls: [ "stun:stun.l.google.com:19302" ]
+				}
+			],
 			iceTransportPolicy: 'all',
 			//iceCandidatePoolSize: 0
-		};
+		};*/
 
 		function init() {
-			//config = null;
+
 			peer = new RTCPeerConnection(config);
 
 			peer.ontrack = e => {
@@ -140,7 +156,32 @@
 				createOffer();
 			};
 		}
-		
+
+		function Base64Encode(str) {
+			return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+				return String.fromCharCode('0x' + p1);
+			}));
+		}
+
+		function Base64Decode(str) {
+			return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {
+				return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+			}).join(''));
+		}
+
+		function SelectText(element) { 
+			if (document.body.createTextRange) {
+				var range = document.body.createTextRange();
+				range.moveToElementText(element);
+				range.select();
+			} else if (window.getSelection) {
+				var selection = window.getSelection();        
+				var range = document.createRange();
+				range.selectNodeContents(element);
+				selection.removeAllRanges();
+				selection.addRange(range);
+			}
+		}
 		var ul = chatPage.querySelector('ul');
 		function dcInit() {
 			console.log('create datachannel');
@@ -153,10 +194,14 @@
 			}
 			dc.onclose = () => console.log('datachannel close');
 			dc.onmessage = e => {
-				var li = document.createElement("li");
-				li.appendChild(document.createTextNode(e.data));
-				ul.appendChild(li);
+				addToChat(e.data);
 			};
+		}
+		
+		function addToChat(message) {
+			var li = document.createElement("li");
+			li.appendChild(document.createTextNode(message));
+			ul.appendChild(li);
 		}
 
 		var offerOptions = {offerToReceiveAudio: 1};
